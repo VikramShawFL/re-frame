@@ -1,0 +1,135 @@
+* Re-Frame
+  
+* Example:-  
+*** we're working on a SPA which displays a list of items. You have just clicked the "add" button which will add a list to the items.
+*** In response, what happens within this imaginary re-frame app is explained below.
+
+** 1st Domino- Event Dispatch
+
+*** Events are the things when somethings happen like user click a button, web page has finished loading or input field was changed.
+*** Unless and until the event is triggered, no six domino cascade occurs. 
+*** It is because of the events only that a re-frame app is sarts working, loop iteration after loop iteration, from one state to the next.
+
+**** Example
+
+#+begin_src clojure
+(defn add-button
+   [item-id]
+   [:div
+      :on-click #(re-frame.core/add [:add-item item-id])])
+#+end_src
+
+***** This on-click handler creates a event and  force the re-frame app to start working.
+***** This event is a vector and, in this case, it has 2 elements: [:add-item item-id].
+***** The first element of an event vector, :add-item, is the kind of event which will add the item in the list
+
+** 2nd Domino- Event Handling
+   
+*** This step comes into picture after event is triggered. 
+*** According to the event, an application decide what action need to be taken and this is known as event handling.
+*** Event handler functions compute side effects known as effects in re-frame.
+*** They evaluate description of side effects. 
+*** This description is nothing but a data strcture and according to this data structure after computing the whole application will change. 
+*** Generally the "application state" of the SPA will change, but sometimes localstore, cookies, databases, emails, logs, etc will also gets affecte.
+
+***** Now after the event is dispatch, an event handler function(let's say h) is called to compute the effect of the event [:add-item item-id].
+***** On app startup, re-frame.core/reg-event-fx would have been used to register this h as the handler for :add-item events, like this:
+
+#+begin_src clojure
+(re-frame.core/reg-event-fx   ;; a part of the re-frame API
+  :add-item                   ;; the kind of event
+  h)                          ;; the handler function for this kind of event
+#+end_src
+                          
+***** "h" is written to take two arguments:
+******* A coeffects map which contains the current state of the app.
+******* The event to handle
+
+***** Now it depends on h function on how it will compute and how the app will change by the event. 
+***** It returns a map of effects - a description of those changes.
+
+#+begin_src clojure
+(defn h 
+  [{:keys [db]} [_ item-id]]                   ;; obtain db and id
+  {:db  (assoc-in db [:items item-id])})      ;; effect is "change app state to
+#+end_src
+
+***** Re-frame can automatically inject necessary aspects of the app into that first coeffects argument(map). 
+***** Different event handlers need different "things" to get their job done.
+***** But current "application state" is one aspect of the app which is invariably needed, and it is available by default in the :db key.
+
+** 3rd Domino- Effect Handling
+
+*** This steps occur after effects are realised. 
+*** Effects are very important because it moves an app forward or else the app will be in one state foreve without achieving anything.
+*** Re-frame understand the importance of effects due to which it can be debuggable, auditable, mockable and pluggable.
+
+***** The effects returned by the event handler function is taken care by the effact handler.
+***** Here's what h returned:
+
+#+begin_src clojure
+{:db  (assoc-in db [:items item-id])}   ;; db is a map of some structure
+#+end_src
+
+***** Each key of the map identifies one kind of effect, and the value for that key supplies further details.
+***** The map returned by h only has one key, so there's only one effect.
+***** A key of :db means to update the app state with the key's value.
+***** This update of "app state" is a mutative step, facilitated by re-frame which has a built-in effects handler for the :db effect.
+
+** 4th Domino- Query
+   
+*** This domino is all about query in which it extracts data from "app state", efficiently computing reactive, multi-layered and providing the right format for view functions.
+
+***** The 4-5-6 domino cascade implements the formula made famous by Facebook's ground-breaking React library:  v = f(s)
+******* Where f(function) that compute which DOM nodes, v(view), should be displayed to the user when the application is in a given s(app state).
+
+***** After Domino 3 the application status(s) changes and goes to the dominoes 4, 5 and 6, after which we have a new view(v) which is shown to the users..
+***** In this domino 4, a query function is automatically called over the app state. 
+***** This query function "extracts" data from application state, and then computes "a materialised view" of the application state- producing data which is useful to the view functions of domino, 5.
+***** In this the items are being stored in app state, there's not a lot to compute.
+***** It acts like a extractor which extract the list of items out of application state:
+
+#+begin_src clojure
+(defn query-fn
+  [db v]         ;; db is current app state, v the query vector
+  (:items db))   ;; not much of a materialised view
+#+end_src
+
+***** On program startup, a query-fn must be associated with a query-id
+
+#+begin_src clojure
+(re-frame.core/reg-sub  ;; part of the re-frame API
+   :query-items         ;; query id  
+   query-fn)            ;; query fn
+#+end_src
+
+***** Which says "if, in domino 5, you see a (subscribe [:query-items]), then use query-fn to compute it".
+      
+** 5th Domino- view
+
+*** It contains one or more view functions or reagent components that compute the UI DOM which need to be displayed to the user.
+*** In order to compute the UI, they need to sorce application state, which is delivered reactively via the queries of Domino 4. 
+*** They compute hiccup-formatted data, which is a description of the DOM required.
+
+***** After the query function for :query-items is computed a new value, any view(function) which uses a (subscribe [:query-items]) is called automatically to re-compute new DOM.
+***** View functions compute a data structure, in hiccup format, describing the DOM nodes required. 
+
+#+begin_src clojure
+(defn items-view []
+  (let [items  (subscribe [:query-items])]          ;; source items from app state
+    [:div (map item-render @items)]))               ;; assume item-render already written
+#+end_src
+
+***** Notice how items is "sourced" from "app state" via re-frame.core/subscribe.
+***** It is called with a vector argument, and the first element of that vector is a query-id which identifies the "materialised view" required by the view.
+***** Subscribe queries can be parameterised. Ex- (subscribe [:items "blue"])
+***** The vector identifies, first, the query, and then supplies further arguments. 
+
+** 6th Domino- DOM
+
+*** In this domino, the hiccup-formatted data returned by the view functions of Domino 5 are made real and the browser DOM nodes are changed.           
+
+***** The hiccup returned by the view function is made into real browser DOM by Reagent/React.
+***** No code from you required. Just happens.
+***** The DOM computed "this time" will be the same as "last time", except for the addition of DOM for the added item. 
+
