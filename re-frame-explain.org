@@ -1,7 +1,7 @@
 * Re-Frame
   
 * Example:-  
-*** we're working on a SPA which displays a list of items. You have just clicked the "add" button which will add a list to the items.
+*** We're working on a SPA which displays a list of items. You have just clicked the "add" button which will add a list to the items.
 *** In response, what happens within this imaginary re-frame app is explained below.
 
 ** 1st Domino- Event Dispatch
